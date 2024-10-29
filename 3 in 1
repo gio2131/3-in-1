@@ -1,0 +1,129 @@
+-- Services
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+
+-- Toggle settings
+local highlightEnabled = false
+local aimAssistEnabled = false
+local assistRange = 100
+local targetLock = nil
+
+-- Keybinds
+local highlightToggleKey = Enum.KeyCode.H
+local aimAssistToggleKey = Enum.KeyCode.Q
+local teleportKey = Enum.KeyCode.Z
+
+-- Functions for highlighting
+local function addHighlightToPlayer(player)
+    if player.Character and not player.Character:FindFirstChild("Highlight") then
+        local highlight = Instance.new("Highlight")
+        highlight.Parent = player.Character
+        highlight.FillColor = Color3.new(1, 1, 1)
+        highlight.OutlineColor = Color3.new(1, 0, 0)
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOn
+    end
+end
+
+local function removeHighlightFromPlayer(player)
+    if player.Character then
+        local highlight = player.Character:FindFirstChild("Highlight")
+        if highlight then
+            highlight:Destroy()
+        end
+    end
+end
+
+local function toggleHighlight()
+    highlightEnabled = not highlightEnabled
+    for _, player in pairs(Players:GetPlayers()) do
+        if highlightEnabled then
+            addHighlightToPlayer(player)
+        else
+            removeHighlightFromPlayer(player)
+        end
+    end
+end
+
+-- Aim assist functions
+local function getNearestPlayerToCursor()
+    local localPlayer = Players.LocalPlayer
+    local mouse = localPlayer:GetMouse()
+    local screenCenter = Vector2.new(mouse.X, mouse.Y)
+    local closestPlayer = nil
+    local shortestDistance = assistRange
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= localPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local playerPosition = player.Character.Head.Position
+            local screenPosition, onScreen = Camera:WorldToViewportPoint(playerPosition)
+            if onScreen then
+                local distanceFromCursor = (Vector2.new(screenPosition.X, screenPosition.Y) - screenCenter).Magnitude
+                if distanceFromCursor < shortestDistance then
+                    shortestDistance = distanceFromCursor
+                    closestPlayer = player.Character
+                end
+            end
+        end
+    end
+
+    return closestPlayer
+end
+
+local function aimAtTarget()
+    if aimAssistEnabled and targetLock and targetLock:FindFirstChild("Head") then
+        local targetPosition = targetLock.Head.Position
+        local direction = (targetPosition - Camera.CFrame.Position).Unit
+        Camera.CFrame = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + direction)
+    end
+end
+
+-- Teleport to cursor function
+local function teleportToCursor()
+    local player = Players.LocalPlayer
+    local character = player.Character
+    if character and character:FindFirstChild("HumanoidRootPart") then
+        local targetPosition = player:GetMouse().Hit.Position
+        character.HumanoidRootPart.CFrame = CFrame.new(targetPosition + Vector3.new(0, 3, 0))
+    end
+end
+
+-- Keybind handlers
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+
+    if input.KeyCode == highlightToggleKey then
+        toggleHighlight()
+    elseif input.KeyCode == aimAssistToggleKey then
+        aimAssistEnabled = not aimAssistEnabled
+        if aimAssistEnabled then
+            targetLock = getNearestPlayerToCursor()
+        else
+            targetLock = nil
+        end
+    elseif input.KeyCode == teleportKey then
+        teleportToCursor()
+    end
+end)
+
+-- Update aim assist each frame
+RunService.RenderStepped:Connect(aimAtTarget)
+
+-- Ensure highlights apply to new players
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function()
+        if highlightEnabled then
+            addHighlightToPlayer(player)
+        end
+    end)
+end)
+
+-- Apply initial highlights if enabled
+for _, player in pairs(Players:GetPlayers()) do
+    player.CharacterAdded:Connect(function()
+        if highlightEnabled then
+            addHighlightToPlayer(player)
+        end
+    end)
+end
